@@ -204,8 +204,8 @@ func (query *TokenNftInfoQuery) GetCost(client *Client) (Hbar, error) {
 	return HbarFromTinybar(cost), nil
 }
 
-func _TokenNftInfoQueryShouldRetry(logID string, _ interface{}, response interface{}) _ExecutionState {
-	return _QueryShouldRetry(logID, Status(response.(*services.Response).GetTokenGetNftInfo().Header.NodeTransactionPrecheckCode))
+func _TokenNftInfoQueryShouldRetry(_ interface{}, response interface{}) _ExecutionState {
+	return _QueryShouldRetry(Status(response.(*services.Response).GetTokenGetNftInfo().Header.NodeTransactionPrecheckCode))
 }
 
 func _TokenNftInfoQueryMapStatusError(_ interface{}, response interface{}) error {

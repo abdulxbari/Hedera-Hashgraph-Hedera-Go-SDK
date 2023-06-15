@@ -145,8 +145,8 @@ func (query *TopicInfoQuery) GetCost(client *Client) (Hbar, error) {
 	return HbarFromTinybar(cost), nil
 }
 
-func _TopicInfoQueryShouldRetry(logID string, _ interface{}, response interface{}) _ExecutionState {
-	return _QueryShouldRetry(logID, Status(response.(*services.Response).GetConsensusGetTopicInfo().Header.NodeTransactionPrecheckCode))
+func _TopicInfoQueryShouldRetry(_ interface{}, response interface{}) _ExecutionState {
+	return _QueryShouldRetry(Status(response.(*services.Response).GetConsensusGetTopicInfo().Header.NodeTransactionPrecheckCode))
 }
 
 func _TopicInfoQueryMapStatusError(_ interface{}, response interface{}) error {

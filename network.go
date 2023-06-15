@@ -21,18 +21,22 @@ package hedera
  */
 
 import (
+	"os"
 	"time"
 )
 
 type _Network struct {
 	_ManagedNetwork
 	addressBook map[AccountID]NodeAddress
+	logger      *Logger
 }
 
 func _NewNetwork() _Network {
+	logger := NewLogger("hedera-sdk-go", LogLevel(os.Getenv("HEDERA_SDK_GO_LOG_LEVEL")))
 	return _Network{
 		_ManagedNetwork: _NewManagedNetwork(),
 		addressBook:     nil,
+		logger:          logger,
 	}
 }
 
@@ -41,7 +45,7 @@ func (network *_Network) SetNetwork(net map[string]AccountID) (err error) {
 	newNetwork := make(map[string]_IManagedNode)
 
 	for url, id := range net {
-		node, err := _NewNode(id, url, network.minBackoff)
+		node, err := _NewNode(id, url, network.minBackoff, network.logger)
 		if err != nil {
 			return err
 		}

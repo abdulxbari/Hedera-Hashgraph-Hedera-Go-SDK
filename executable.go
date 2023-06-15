@@ -23,15 +23,12 @@ package hedera
 import (
 	"context"
 	"encoding/hex"
-	"os"
+	"strconv"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
 
 	protobuf "google.golang.org/protobuf/proto"
-
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 
 	"github.com/pkg/errors"
 
@@ -40,30 +37,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
-
-var logCtx zerolog.Logger
-
-// A required init function to setup logging at the correct level
-func init() { // nolint
-	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
-
-	if os.Getenv("HEDERA_SDK_GO_LOG_PRETTY") != "" {
-		log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
-	}
-
-	switch os.Getenv("HEDERA_SDK_GO_LOG_LEVEL") {
-	case "DEBUG":
-		zerolog.SetGlobalLevel(zerolog.DebugLevel)
-	case "TRACE":
-		zerolog.SetGlobalLevel(zerolog.TraceLevel)
-	case "INFO":
-		zerolog.SetGlobalLevel(zerolog.InfoLevel)
-	default:
-		zerolog.SetGlobalLevel(zerolog.Disabled)
-	}
-
-	logCtx = log.With().Str("module", "hedera-sdk-go").Logger()
-}
 
 const maxAttempts = 10
 
@@ -92,7 +65,7 @@ type _Method struct {
 func _Execute( // nolint
 	client *Client,
 	request interface{},
-	shouldRetry func(string, interface{}, interface{}) _ExecutionState,
+	shouldRetry func(interface{}, interface{}) _ExecutionState,
 	makeRequest func(interface{}) interface{},
 	advanceRequest func(interface{}),
 	getNodeAccountID func(interface{}) AccountID,
@@ -173,16 +146,16 @@ func _Execute( // nolint
 
 		node._InUse()
 
-		logCtx.Trace().Str("requestId", logID).Str("nodeAccountID", node.accountID.String()).Str("nodeIPAddress", node.address._String()).
+		client.logger.Trace().Str("requestId", logID).Str("nodeAccountID", node.accountID.String()).Str("nodeIPAddress", node.address._String()).
 			Str("Request Proto:", hex.EncodeToString(marshaledRequest)).Msg("executing")
 
 		if !node._IsHealthy() {
-			logCtx.Trace().Str("requestId", logID).Str("delay", node._Wait().String()).Msg("node is unhealthy, waiting before continuing")
-			_DelayForAttempt(logID, backOff.NextBackOff(), attempt)
+			client.logger.Trace().Str("requestId", logID).Str("delay", node._Wait().String()).Msg("node is unhealthy, waiting before continuing")
+			_DelayForAttempt(logID, backOff.NextBackOff(), attempt, client.logger)
 			continue
 		}
 
-		logCtx.Trace().Str("requestId", logID).Msg("updating node account ID index")
+		client.logger.Trace().Str("requestId", logID).Msg("updating node account ID index")
 
 		channel, err := node._GetChannel()
 		if err != nil {
@@ -203,7 +176,7 @@ func _Execute( // nolint
 			ctx, cancel = context.WithDeadline(ctx, grpcDeadline)
 		}
 
-		logCtx.Trace().Str("requestId", logID).Msg("executing gRPC call")
+		client.logger.Trace().Str("requestId", logID).Msg("executing gRPC call")
 
 		var marshaledResponse []byte
 		if method.query != nil {
@@ -223,7 +196,7 @@ func _Execute( // nolint
 		}
 		if err != nil {
 			errPersistent = err
-			if _ExecutableDefaultRetryHandler(logID, err) {
+			if _ExecutableDefaultRetryHandler(logID, err, client.logger) {
 				client.network._IncreaseBackoff(node)
 				continue
 			}
@@ -239,15 +212,34 @@ func _Execute( // nolint
 		}
 
 		node._DecreaseBackoff()
-		switch shouldRetry(logID, request, resp) {
+
+		mappedStatus := mapStatusError(request, resp)
+		execNode := client.network._GetNode()
+		loggEvent := client.logger.Trace().Str("requestID", logID).Str("nodeID", execNode.accountID.String()).Str("nodeAddress", execNode.address._String()).Str("nodeIsHealth", strconv.FormatBool(execNode._IsHealthy())).Str("newtork", client.GetLedgerID().String()).Str("status", mappedStatus.Error())
+
+		// Check if the response is a querry or a transaction
+		_, ok := request.(*Query)
+		if !ok {
+			txID := request.(*Transaction).GetTransactionID().String()
+			loggEvent.Str("txID", txID).Msg("Transaction status received")
+		} else {
+			txID := request.(*Query).GetPaymentTransactionID().String()
+			// Some queries don't have a transaction ID
+			if txID == "" {
+				txID = "None"
+			}
+			loggEvent.Str("PaymentTxID", txID).Msg("Query status received")
+		}
+
+		switch shouldRetry(request, resp) {
 		case executionStateRetry:
 			errPersistent = mapStatusError(request, resp)
-			_DelayForAttempt(logID, backOff.NextBackOff(), attempt)
+			_DelayForAttempt(logID, backOff.NextBackOff(), attempt, client.logger)
 			continue
 		case executionStateExpired:
 			if transaction, ok := request.(*Transaction); ok {
 				if !client.GetOperatorAccountID()._IsZero() && transaction.regenerateTransactionID && !transaction.transactionIDs.locked {
-					logCtx.Trace().Str("requestId", logID).Msg("received `TRANSACTION_EXPIRED` with transaction ID regeneration enabled; regenerating")
+					client.logger.Trace().Str("requestId", logID).Msg("received `TRANSACTION_EXPIRED` with transaction ID regeneration enabled; regenerating")
 					transaction.transactionIDs._Set(transaction.transactionIDs.index, TransactionIDGenerate(client.GetOperatorAccountID()))
 					if err != nil {
 						panic(err)
@@ -266,7 +258,7 @@ func _Execute( // nolint
 
 			return &services.Response{}, mapStatusError(request, resp)
 		case executionStateFinished:
-			logCtx.Trace().Str("Response Proto:", hex.EncodeToString(marshaledResponse)).Msg("finished")
+			client.logger.Trace().Str("Response Proto:", hex.EncodeToString(marshaledResponse)).Msg("finished")
 
 			return mapResponse(request, resp, node.accountID, protoRequest)
 		}
@@ -283,14 +275,14 @@ func _Execute( // nolint
 	return &services.Response{}, errPersistent
 }
 
-func _DelayForAttempt(logID string, backoff time.Duration, attempt int64) {
-	logCtx.Trace().Str("requestId", logID).Dur("delay", backoff).Int64("attempt", attempt+1).Msg("retrying request attempt")
+func _DelayForAttempt(logID string, backoff time.Duration, attempt int64, logger *Logger) {
+	logger.Trace().Str("requestId", logID).Dur("delay", backoff).Int64("attempt", attempt+1).Msg("retrying request attempt")
 	time.Sleep(backoff)
 }
 
-func _ExecutableDefaultRetryHandler(logID string, err error) bool {
+func _ExecutableDefaultRetryHandler(logID string, err error, logger *Logger) bool {
 	code := status.Code(err)
-	logCtx.Trace().Str("requestId", logID).Str("status", code.String()).Msg("received gRPC error with status code")
+	logger.Trace().Str("requestId", logID).Str("status", code.String()).Msg("received gRPC error with status code")
 	switch code {
 	case codes.ResourceExhausted, codes.Unavailable:
 		return true

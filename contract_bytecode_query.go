@@ -143,8 +143,8 @@ func (query *ContractBytecodeQuery) GetCost(client *Client) (Hbar, error) {
 	return HbarFromTinybar(cost), nil
 }
 
-func _ContractBytecodeQueryShouldRetry(logID string, _ interface{}, response interface{}) _ExecutionState {
-	return _QueryShouldRetry(logID, Status(response.(*services.Response).GetContractGetBytecodeResponse().Header.NodeTransactionPrecheckCode))
+func _ContractBytecodeQueryShouldRetry(_ interface{}, response interface{}) _ExecutionState {
+	return _QueryShouldRetry(Status(response.(*services.Response).GetContractGetBytecodeResponse().Header.NodeTransactionPrecheckCode))
 }
 
 func _ContractBytecodeQueryMapStatusError(_ interface{}, response interface{}) error {

@@ -94,8 +94,8 @@ func (query *AccountInfoQuery) _Build() *services.Query_CryptoGetInfo {
 	return &pb
 }
 
-func _AccountInfoQueryShouldRetry(logID string, _ interface{}, response interface{}) _ExecutionState {
-	return _QueryShouldRetry(logID, Status(response.(*services.Response).GetCryptoGetInfo().Header.NodeTransactionPrecheckCode))
+func _AccountInfoQueryShouldRetry(_ interface{}, response interface{}) _ExecutionState {
+	return _QueryShouldRetry(Status(response.(*services.Response).GetCryptoGetInfo().Header.NodeTransactionPrecheckCode))
 }
 
 func _AccountInfoQueryMapStatusError(_ interface{}, response interface{}) error {

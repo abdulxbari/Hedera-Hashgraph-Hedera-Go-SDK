@@ -64,6 +64,7 @@ type Client struct {
 	defaultNetworkUpdatePeriod time.Duration
 	networkUpdateContext       context.Context
 	cancelNetworkUpdate        context.CancelFunc
+	logger                     *Logger
 }
 
 // TransactionSigner is a closure or function that defines how transactions will be signed
@@ -129,6 +130,7 @@ func _NewClient(network _Network, mirrorNetwork []string, ledgerId *LedgerID) *C
 		defaultNetworkUpdatePeriod:      24 * time.Hour,
 		networkUpdateContext:            ctx,
 		cancelNetworkUpdate:             cancel,
+		logger:                          network.logger,
 	}
 
 	client.SetMirrorNetwork(mirrorNetwork)

@@ -559,9 +559,8 @@ func (this *Transaction) _KeyAlreadySigned(
 	return false
 }
 
-func _TransactionShouldRetry(logID string, _ interface{}, response interface{}) _ExecutionState {
+func _TransactionShouldRetry(_ interface{}, response interface{}) _ExecutionState {
 	status := Status(response.(*services.TransactionResponse).NodeTransactionPrecheckCode)
-	logCtx.Trace().Str("requestId", logID).Str("status", status.String()).Msg("transaction precheck status received")
 	switch status {
 	case StatusPlatformTransactionNotCreated, StatusPlatformNotActive, StatusBusy:
 		return executionStateRetry

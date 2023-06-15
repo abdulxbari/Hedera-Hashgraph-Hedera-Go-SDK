@@ -45,12 +45,14 @@ type _Node struct {
 	channel           *_Channel
 	addressBook       *NodeAddress
 	verifyCertificate bool
+	logger            *Logger
 }
 
-func _NewNode(accountID AccountID, address string, minBackoff time.Duration) (node *_Node, err error) {
+func _NewNode(accountID AccountID, address string, minBackoff time.Duration, logger *Logger) (node *_Node, err error) {
 	node = &_Node{
 		accountID:         accountID,
 		verifyCertificate: true,
+		logger:            logger,
 	}
 	node._ManagedNode, err = _NewManagedNode(address, minBackoff)
 	return node, err
@@ -142,7 +144,7 @@ func (node *_Node) _GetChannel() (*_Channel, error) {
 			InsecureSkipVerify: true, // nolint
 			VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
 				if node.addressBook == nil {
-					logCtx.Warn().Msg("skipping certificate check since no cert hash was found")
+					node.logger.Warn().Msg("skipping certificate check since no cert hash was found")
 					return nil
 				}
 

@@ -143,8 +143,8 @@ func (query *FileContentsQuery) GetCost(client *Client) (Hbar, error) {
 	return HbarFromTinybar(cost), nil
 }
 
-func _FileContentsQueryShouldRetry(logID string, _ interface{}, response interface{}) _ExecutionState {
-	return _QueryShouldRetry(logID, Status(response.(*services.Response).GetFileGetContents().Header.NodeTransactionPrecheckCode))
+func _FileContentsQueryShouldRetry(_ interface{}, response interface{}) _ExecutionState {
+	return _QueryShouldRetry(Status(response.(*services.Response).GetFileGetContents().Header.NodeTransactionPrecheckCode))
 }
 
 func _FileContentsQueryMapStatusError(_ interface{}, response interface{}) error {
